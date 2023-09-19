@@ -63,13 +63,20 @@ class Vocab:
     def convert_ids_to_tokens(self, indices):
         return [self.idx_to_token[index] for index in indices]
 
-
+import json
 def save_vocab(vocab, path):
+    """
+    保存词表为json格式
+    :param vocab: 词表
+    :param path: 保存路径
+    """
     with open(path, 'w') as writer:
-        writer.write("\n".join(vocab.idx_to_token))
+        writer.write(json.dumps(vocab.idx_to_token, indent=4))
+
 
 
 def read_vocab(path):
     with open(path, 'r') as f:
-        tokens = f.read().split('\n')
+        json_str = f.read()
+    tokens = json.loads(json_str)
     return Vocab(tokens)
