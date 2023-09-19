@@ -1,8 +1,13 @@
 # Defined in Section 4.6.4
 # https://github.com/HIT-SCIR/plm-nlp-code/blob/main/chp4/utils.py
+import os
 
 import torch
-from vocab import Vocab
+from vocab import Vocab, save_vocab ,read_vocab
+from torch.nn.utils.rnn import pad_sequence
+
+
+
 
 def load_sentence_polarity():
     from nltk.corpus import sentence_polarity
@@ -23,15 +28,34 @@ def load_sentence_polarity():
 
 
 
-def load_tiny_shakespeare():
-    from datasets import load_dataset
-    from collections import Counter
-    dataset = load_dataset("tiny_shakespeare")
+def load_tiny_shakespeare(use_cache=True):
+    # 检查是否已经缓存到文件
+    if use_cache and os.path.exists("dataset/train.txt") \
+        and os.path.exists("dataset/test.txt") and os.path.exists("dataset/vocab.json"):
 
-    # Combine all the text into one long string
-    train =  "".join(dataset["train"]["text"])
-    test = "".join(dataset["test"]["text"])
+        # 从文件中读取
+        with open("dataset/train.txt", "r") as f:
+            train = f.read()
+        with open("dataset/test.txt", "r") as f:
+            test = f.read()
+        vocab = read_vocab("dataset/vocab.json")
+    else:
+        # 若没有缓存， 则从datasets库加载并缓存
+        from datasets import load_dataset
+        dataset = load_dataset("tiny_shakespeare")
 
+        # dataset包含train、test、validation三个子集，每个子集包含text和label两个字段
+        train = "".join(dataset["train"]["text"])
+        test = "".join(dataset["test"]["text"])
+
+        vocab = Vocab.build(sorted(list(set(train + test))), reserved_tokens=["<pad>"])
+
+        # 输出为文件, 使用系统无关路径
+        with open("dataset/train.txt", "w") as f:
+            f.write(train)
+        with open("dataset/test.txt", "w") as f:
+            f.write(test)
+        save_vocab(vocab, "dataset/vocab.json")
 
     # Build the vocabulary
     vocab = Vocab.build(train + test, reserved_tokens=["<pad>"])
