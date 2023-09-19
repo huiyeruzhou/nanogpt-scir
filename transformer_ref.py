@@ -13,21 +13,38 @@ from utils import load_sentence_polarity, length_to_mask, load_tiny_shakespeare
 # tqdm是一个Pyth模块，能以进度条的方式显式迭代的进度
 from tqdm.auto import tqdm
 
-class TransformerDataset(Dataset):
-    def __init__(self, data):
-        self.data = data
-    def __len__(self):
-        return len(self.data)
-    def __getitem__(self, i):
-        return self.data[i]
 
-def collate_fn(examples):
-    lengths = torch.tensor([len(ex[0]) for ex in examples])
-    inputs = [torch.tensor(ex[0]) for ex in examples]
-    targets = torch.tensor([ex[1] for ex in examples], dtype=torch.long)
-    # 对batch内的样本进行padding，使其具有相同长度
-    inputs = pad_sequence(inputs, batch_first=True)
-    return inputs, lengths, targets
+class TransformerDataset(Dataset):
+    """
+    用于加载Transformer的数据集
+    数据集内部是字符token对应的id
+    每次取样时返回一个block_size长度的序列
+    目标是预测下一个字符
+    """
+    def __init__(self, data, block_size):
+        """
+        初始化一个数据集
+
+        :param data: 数据集中的内容
+        :param block_size: 每个样本的长度
+        """
+        self.data = data
+        self.block_size = block_size
+
+    def __len__(self):
+        # 虽然数据长度为len(self.data), 但是每个样本的长度为block_size + 1
+        # 因此可取的样本数只有len(self.data) - self.block_size
+        return len(self.data) - self.block_size
+
+    def __getitem__(self, idx):
+        # 获取一个长为block_size + 1的序列
+        chunk = self.data[idx:idx + self.block_size + 1]
+        # 输入序列为前block_size个字符
+        x = torch.tensor(chunk[:-1], dtype=torch.long)
+        # 目标序列, 每一个字符都是输入序列中对应位置的下一个字符
+        y = torch.tensor(chunk[1:], dtype=torch.long)
+        return x, y
+
 
 class PositionalEncoding(nn.Module):
     def __init__(self, d_model, dropout=0.1, max_len=512):

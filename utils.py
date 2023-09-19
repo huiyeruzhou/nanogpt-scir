@@ -57,14 +57,20 @@ def load_tiny_shakespeare(use_cache=True):
             f.write(test)
         save_vocab(vocab, "dataset/vocab.json")
 
-    # Build the vocabulary
-    vocab = Vocab.build(train + test, reserved_tokens=["<pad>"])
-
-    # Split the data into train and test sets
+    # 将文本转换为id序列
     train_data = vocab.convert_tokens_to_ids(train)
     test_data = vocab.convert_tokens_to_ids(test)
 
     return train_data, test_data, vocab
+
+def collate_fn(examples):
+    print(examples)
+    # lengths = torch.tensor([len(ex[0]) for ex in examples])
+    # inputs = [torch.tensor(ex[0]) for ex in examples]
+    # targets = torch.tensor([ex[1] for ex in examples], dtype=torch.long)
+    # # 对batch内的样本进行padding，使其具有相同长度
+    # inputs = pad_sequence(inputs, batch_first=True)
+    return [x for x, y in examples], [y for x, y in examples]
 
 
 def length_to_mask(lengths):
