@@ -91,6 +91,7 @@ if __name__ == '__main__':
             optimizer.step()
             total_loss += loss.item()
             # 保存检查点
+            os.makedirs("checkpoint", exist_ok=True)
             checkpoint_path = "checkpoint/model_checkpoint-{}.pth".format(epoch)
             torch.save(model.state_dict(), checkpoint_path)
             pbar.set_description(f"epoch {epoch+1} iter {it}: train loss {loss.item():.5f}.")

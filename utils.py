@@ -51,6 +51,7 @@ def load_tiny_shakespeare(use_cache=True):
         vocab = Vocab.build(sorted(list(set(train + test))), reserved_tokens=["<pad>"])
 
         # 输出为文件, 使用系统无关路径
+        os.makedirs("dataset", exist_ok=True)
         with open("dataset/train.txt", "w") as f:
             f.write(train)
         with open("dataset/test.txt", "w") as f:
