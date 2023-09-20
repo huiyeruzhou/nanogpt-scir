@@ -31,7 +31,7 @@ def sample(model, x, steps, temperature=1.0, sample=False, top_k=None):
     显然，这种抽样具有二次复杂度，不同于仅具有线性复杂度的循环神经网络（RNN），
     并且具有块大小（block_size）的有限上下文窗口，不同于具有无限上下文窗口的循环神经网络。
     """
-    block_size = 128
+    block_size = 64
     model.is_training = False
     for k in range(steps):
         # 如果需要，裁剪上下文
@@ -59,19 +59,20 @@ def sample(model, x, steps, temperature=1.0, sample=False, top_k=None):
     return x
 
 if __name__ == "__main__":
-    embedding_dim = 96
-    hidden_dim = 96
-    batch_size = 1536
-    block_size = 128
-    num_epoch = 5
-    n_layer = 4
-    n_head = 6
+    embedding_dim = 128
+    hidden_dim = 128
+    batch_size = 2 * (256 + 128 + 64)
+    block_size = 64
+    num_epoch = 2
+    n_layer = 3
+    n_head = 4
 
     # 加载词表
     vocab = read_vocab('dataset/vocab.json')
     # 加载模型
     model = Transformer(len(vocab), embedding_dim, hidden_dim, block_size, num_head=n_head, num_layers=n_layer).to('cuda')
     # 从checkpoint的pth文件中加载模型
+    model = nn.DataParallel(model)
     model.load_state_dict(torch.load('checkpoint/model_checkpoint-0.pth'))
 
     # 获取起点
@@ -80,5 +81,5 @@ if __name__ == "__main__":
     context = "O God, O God!How can we live in such a world!"
     x = torch.tensor([vocab.convert_tokens_to_ids(context)]).to('cuda')
     # 生成序列
-    y = sample(model, x, 128, temperature=1.0, sample=True, top_k=10)[0]
+    y = sample(model, x, 64, temperature=1.0, sample=True, top_k=10)[0]
     print("".join(vocab.convert_ids_to_tokens(y)))

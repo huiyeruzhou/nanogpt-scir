@@ -16,17 +16,18 @@ Transformer的代码可以参考：https://github.com/karpathy/nanoGPT ，
 
 @dataclass
 class Config:
-    batch_size: int = 2
-    seq_len: int = 3
-    n_embd: int = 4
-    n_head: int = 2
-    n_layer: int = 2
+    def __init__(self, vocab_size, block_size,
+                 batch_size=2, seq_len=3, n_embd=4, n_head=2, n_layer=2,
+                 **kwargs):
+        for k, v in kwargs.items():
+            setattr(self, k, v)
 
 
 class MultiHeadSelfAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
+        assert config.n_embd % config.n_head == 0
         self.proj = nn.Linear(config.n_embd, config.n_embd * 3)
 
     def forward(self, x):

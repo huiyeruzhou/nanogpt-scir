@@ -69,7 +69,7 @@ if __name__ == '__main__':
         inputs, targets = [x.to(device) for x in batch]
         with torch.no_grad():
             log_probs, loss = model(inputs)
-            losses.append(loss.item())
+            losses.append(loss)
 
     # 输出在测试集上的准确率
     print(f"Avarage loss: {np.mean(losses):.2f}")
