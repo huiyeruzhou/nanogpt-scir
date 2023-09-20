@@ -4,12 +4,16 @@ import numpy as np
 from tqdm.auto import tqdm
 import torch
 from torch import nn, optim
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, DataLoader
 
 from mingpt_model import GPT
-from model import Config
+from model import Config, Transformer
+from train import CharDataset
+from utils import load_tiny_shakespeare
+from vocab import read_vocab
 
 if __name__ == '__main__':
+
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     from utils import load_tiny_shakespeare
 
@@ -30,14 +34,8 @@ if __name__ == '__main__':
     block_size = 64
     batch_size = 2 * (256 + 128 + 64)
     num_epoch = 2
-    train_config = Config(vocab_size=len(vocab)
-                          , block_size=block_size
-                          , batch_size=batch_size
-                          , embedding_dim=128
-                          , hidden_dim=128
-                          , n_layer=3
-                          , n_head=4
-                          , num_epoch=num_epoch)
+    train_config = Config(vocab_size=len(vocab), block_size=block_size, batch_size=batch_size, n_embd=128, n_head=4,
+                          n_layer=3, hidden_dim=128, num_epoch=num_epoch)
     train_data, test_data, vocab = load_tiny_shakespeare()
     train_dataset = CharDataset(train_data, block_size)
     test_dataset = CharDataset(test_data, block_size)
@@ -50,37 +48,6 @@ if __name__ == '__main__':
         print("".join(vocab.convert_ids_to_tokens(batch[1][0])))
         break
 
-
-    # class CharDataset(Dataset):
-    #
-    #     def __init__(self, data, block_size):
-    #         chars = sorted(list(set(data)))
-    #         data_size, vocab_size = len(data), len(chars)
-    #         print('data has %d characters, %d unique.' % (data_size, vocab_size))
-    #
-    #         self.stoi = {ch: i for i, ch in enumerate(chars)}
-    #         self.itos = {i: ch for i, ch in enumerate(chars)}
-    #         self.block_size = block_size
-    #         self.vocab_size = vocab_size
-    #         self.data = data
-    #
-    #     def __len__(self):
-    #         return len(self.data) - self.block_size
-    #
-    #     def __getitem__(self, idx):
-    #         # grab a chunk of (block_size + 1) characters from the data
-    #         chunk = self.data[idx:idx + self.block_size + 1]
-    #         # encode every character to an integer
-    #         dix = [self.stoi[s] for s in chunk]
-    #         x = torch.tensor(chunk[:-1], dtype=torch.long)
-    #         y = torch.tensor(chunk[1:], dtype=torch.long)
-    #         return x, y
-    #
-    #
-    # # you can download this file at https://github.com/karpathy/char-rnn/blob/master/data/tinyshakespeare/input.txt
-    # text = open('dataset/train.txt', 'r').read()  # don't worry we won't run out of file handles
-    # train_dataset = CharDataset(text, block_size)  # one line of poem is roughly 50 characters
-    #
     # # 加载模型
     # model = GPT(train_config)
     model = Transformer(train_config)
@@ -112,16 +79,37 @@ if __name__ == '__main__':
             checkpoint_path = "checkpoint/model_checkpoint-{}.pth".format(epoch)
             torch.save(model.state_dict(), checkpoint_path)
             pbar.set_description(f"epoch {epoch + 1} iter {it}: train loss {loss.item():.5f}.")
-        print(f"Loss: {total_loss:.2f}")
-
+        print(f"Loss: {total_loss:.5f}")
+    # 加载词表
+    vocab = read_vocab('dataset/vocab.json')
+    # 加载数据
+    block_size = 64
+    batch_size = 4 * 256
+    num_epoch = 2
+    train_config = Config(vocab_size=len(vocab), block_size=block_size, batch_size=batch_size, n_embd=128, n_head=4,
+                          n_layer=3, hidden_dim=128, num_epoch=num_epoch)
+    train_data, test_data, vocab = load_tiny_shakespeare()
+    train_dataset = CharDataset(train_data, block_size)
+    test_dataset = CharDataset(test_data, block_size)
+    train_data_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, pin_memory=True, num_workers=4)
+    test_data_loader = DataLoader(test_dataset, batch_size=1, shuffle=False, pin_memory=True, num_workers=4)
+    # # 加载模型
+    # model = Transformer(train_config).to('cuda')
+    # # 从checkpoint的pth文件中加载模型
+    # model = nn.DataParallel(model)
+    # model.load_state_dict(torch.load('checkpoint/model_checkpoint-0.pth'))
     # 测试过程
     acc = 0
     losses = []
-    for batch in tqdm(test_data_loader, desc=f"Testing"):
-        inputs, targets = [x.to(device) for x in batch]
+    pbar  = tqdm(enumerate(test_data_loader), total=len(test_data_loader))
+    for batch in pbar:
+        it, (inputs, targets) = batch
+        inputs = inputs.to('cuda')
+        targets = targets.to('cuda')
         with torch.no_grad():
-            log_probs, loss = model(inputs)
-            losses.append(loss)
+            log_probs, loss = model(inputs, targets)
+            losses.append(loss.item())
+        pbar.set_description(f"iter {it}: test loss {loss.item():.5f}")
 
     # 输出在测试集上的准确率
     print(f"Avarage loss: {np.mean(losses):.2f}")
