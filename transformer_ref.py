@@ -60,26 +60,36 @@ class PositionalEncoding(nn.Module):
 
 class Transformer(nn.Module):
     def __init__(self, vocab_size, embedding_dim, hidden_dim, max_len, num_head, num_layers,
-                 dim_feedforward=512, dropout=0.1, activation: str = "relu"):
+                 dim_feedforward=512, dropout=0.1, activation: str = "gelu"):
         super(Transformer, self).__init__()
         # 词嵌入层
         self.embedding_dim = embedding_dim
+        self.drop = nn.Dropout(0)
         self.embeddings = nn.Embedding(vocab_size, embedding_dim)
+        self.pos_emb = nn.Parameter(torch.zeros(max_len,1, embedding_dim))
         self.position_embedding = PositionalEncoding(embedding_dim, dropout, max_len)
         # 编码层：使用Transformer
         encoder_layer = nn.TransformerEncoderLayer(hidden_dim, num_head, dim_feedforward, dropout, activation)
         self.transformer = nn.TransformerEncoder(encoder_layer, num_layers)
         # 输出层 : 将隐藏层的输出映射到词表
+        self.ln_f = nn.LayerNorm(embedding_dim)
         self.output = nn.Linear(hidden_dim, vocab_size)
 
 
     def forward(self, inputs, targets=None):
+        # inputs(b,t) -> (t,b)
         inputs = torch.transpose(inputs, 0, 1)
+        # hidden(t, b, e)
         hidden_states = self.embeddings(inputs)
-        hidden_states = self.position_embedding(hidden_states)
+        # hidden_states = self.position_embedding(hidden_states)
         # attention_mask = length_to_mask(lengths) == False
+        # position(t, 1, e)
+        position_embeddings = self.pos_emb[:hidden_states.shape[0], :, :] # each position maps to a (learnable) vector
+        
+        hidden_states =  self.drop(hidden_states + position_embeddings)
         hidden_states = self.transformer(hidden_states)
         # hidden_states = hidden_states[0, :, :]
+        hidden_states = self.ln_f(hidden_states)
         output = self.output(hidden_states)
         log_probs = F.log_softmax(output, dim=1)
         loss = None

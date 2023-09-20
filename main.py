@@ -2,6 +2,7 @@ import numpy as np
 from tqdm.auto import tqdm
 import torch
 from torch import nn, optim
+from torch.utils.data import Dataset
 if __name__ == '__main__':
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     from utils import load_tiny_shakespeare
@@ -34,6 +35,36 @@ if __name__ == '__main__':
         print("".join(vocab.convert_ids_to_tokens(batch[1][0])))
         break
 
+    class CharDataset(Dataset):
+
+      def __init__(self, data, block_size):
+          chars = sorted(list(set(data)))
+          data_size, vocab_size = len(data), len(chars)
+          print('data has %d characters, %d unique.' % (data_size, vocab_size))
+
+          self.stoi = {ch: i for i, ch in enumerate(chars)}
+          self.itos = {i: ch for i, ch in enumerate(chars)}
+          self.block_size = block_size
+          self.vocab_size = vocab_size
+          self.data = data
+
+      def __len__(self):
+          return len(self.data) - self.block_size
+
+      def __getitem__(self, idx):
+          # grab a chunk of (block_size + 1) characters from the data
+          chunk = self.data[idx:idx + self.block_size + 1]
+          # encode every character to an integer
+          dix = [self.stoi[s] for s in chunk]
+          x = torch.tensor(chunk[:-1], dtype=torch.long)
+          y = torch.tensor(chunk[1:], dtype=torch.long)
+          return x, y
+
+    # you can download this file at https://github.com/karpathy/char-rnn/blob/master/data/tinyshakespeare/input.txt
+    text = open('dataset/train.txt', 'r').read()  # don't worry we won't run out of file handles
+    train_dataset = CharDataset(text, block_size)  # one line of poem is roughly 50 characters
+
+
     # 加载模型
     model = Transformer(len(vocab), embedding_dim, hidden_dim, block_size, num_head=n_head, num_layers=n_layer)
     model = nn.DataParallel(model)
@@ -42,12 +73,14 @@ if __name__ == '__main__':
 
     # 训练过程
     nll_loss = nn.NLLLoss()
-    optimizer = optim.Adam(model.parameters(), lr=0.001)  # 使用Adam优化器
-
+    optimizer = optim.Adam(model.parameters(), lr=6e-4)  # 使用Adam优化器
+  
     model.train()
+
     for epoch in range(num_epoch):
         total_loss = 0
-        for (inputs, targets) in tqdm(train_data_loader, desc=f"Training Epoch {epoch}"):
+        pbar = tqdm(enumerate(train_data_loader), total=len(train_data_loader)) 
+        for it, (inputs, targets) in pbar:
             inputs = inputs.to(device)
             targets = targets.to(device)
             log_probs, loss = model(inputs, targets)
@@ -60,6 +93,7 @@ if __name__ == '__main__':
             # 保存检查点
             checkpoint_path = "checkpoint/model_checkpoint-{}.pth".format(epoch)
             torch.save(model.state_dict(), checkpoint_path)
+            pbar.set_description(f"epoch {epoch+1} iter {it}: train loss {loss.item():.5f}.")
         print(f"Loss: {total_loss:.2f}")
 
     # 测试过程
