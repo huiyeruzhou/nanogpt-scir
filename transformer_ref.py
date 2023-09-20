@@ -9,39 +9,6 @@ from torch.utils.data import Dataset, DataLoader
 
 # tqdm是一个Pyth模块，能以进度条的方式显式迭代的进度
 
-
-class TransformerDataset(Dataset):
-    """
-    用于加载Transformer的数据集
-    数据集内部是字符token对应的id
-    每次取样时返回一个block_size长度的序列
-    目标是预测下一个字符
-    """
-    def __init__(self, data, block_size):
-        """
-        初始化一个数据集
-
-        :param data: 数据集中的内容
-        :param block_size: 每个样本的长度
-        """
-        self.data = data
-        self.block_size = block_size
-
-    def __len__(self):
-        # 虽然数据长度为len(self.data), 但是每个样本的长度为block_size + 1
-        # 因此可取的样本数只有len(self.data) - self.block_size
-        return len(self.data) - self.block_size
-
-    def __getitem__(self, idx):
-        # 获取一个长为block_size + 1的序列
-        chunk = self.data[idx:idx + self.block_size + 1]
-        # 输入序列为前block_size个字符
-        x = torch.tensor(chunk[:-1], dtype=torch.long)
-        # 目标序列, 每一个字符都是输入序列中对应位置的下一个字符
-        y = torch.tensor(chunk[1:], dtype=torch.long)
-        return x, y
-
-
 class PositionalEncoding(nn.Module):
     def __init__(self, d_model, dropout=0.1, max_len=512):
         super(PositionalEncoding, self).__init__()
@@ -59,21 +26,21 @@ class PositionalEncoding(nn.Module):
         return x
 
 class Transformer(nn.Module):
-    def __init__(self, vocab_size, embedding_dim, hidden_dim, max_len, num_head, num_layers,
-                 dim_feedforward=512, dropout=0.1, activation: str = "gelu"):
+    def __init__(self, vocab_size, n_embd, block_size, n_head, n_layers, dropout=0.1,
+                 activation: str = "gelu"):
         super(Transformer, self).__init__()
         # 词嵌入层
-        self.embedding_dim = embedding_dim
+        self.embedding_dim = n_embd
         self.drop = nn.Dropout(0)
-        self.embeddings = nn.Embedding(vocab_size, embedding_dim)
-        self.pos_emb = nn.Parameter(torch.zeros(max_len,1, embedding_dim))
-        self.position_embedding = PositionalEncoding(embedding_dim, dropout, max_len)
+        self.embeddings = nn.Embedding(vocab_size, n_embd)
+        self.pos_emb = nn.Parameter(torch.zeros(block_size, 1, n_embd))
+        self.position_embedding = PositionalEncoding(n_embd, dropout, block_size)
         # 编码层：使用Transformer
-        encoder_layer = nn.TransformerEncoderLayer(hidden_dim, num_head, dim_feedforward, dropout, activation)
-        self.transformer = nn.TransformerEncoder(encoder_layer, num_layers)
+        encoder_layer = nn.TransformerEncoderLayer(n_embd, n_head, 4 * n_embd, dropout, activation)
+        self.transformer = nn.TransformerEncoder(encoder_layer, n_layers)
         # 输出层 : 将隐藏层的输出映射到词表
-        self.ln_f = nn.LayerNorm(embedding_dim)
-        self.output = nn.Linear(hidden_dim, vocab_size)
+        self.ln_f = nn.LayerNorm(n_embd)
+        self.output = nn.Linear(n_embd, vocab_size)
 
 
     def forward(self, inputs, targets=None):
