@@ -4,7 +4,8 @@ import torch
 import torch.nn as nn
 from torch.nn import functional as F
 
-from transformer_ref import Transformer
+from model import Config
+from model import Transformer
 from vocab import read_vocab
 
 
@@ -23,29 +24,37 @@ def top_k_logits(logits, k):
 @torch.no_grad()
 def sample(model, x, steps, temperature=1.0, sample=False, top_k=None):
     """
-    take a conditioning sequence of indices in x (of shape (b,t)) and predict the next token in
-    the sequence, feeding the predictions back into the model each time. Clearly the sampling
-    has quadratic complexity unlike an RNN that is only linear, and has a finite context window
-    of block_size, unlike an RNN that has an infinite context window.
     接收一个输入序列 x （形状为 (b, t)）并预测序列中的下一个标记，每次将预测结果反馈给模型。
-    显然，这种抽样具有二次复杂度，不同于仅具有线性复杂度的循环神经网络（RNN），
-    并且具有块大小（block_size）的有限上下文窗口，不同于具有无限上下文窗口的循环神经网络。
+    可选是否进行随机抽样, 并指定待抽样样本的个数
+    用temperature配合随机抽样可以增加/减少随机性
+
+    :param model: 训练好的模型
+    :param x: 输入序列
+    :param steps: 预测的序列长度
+    :param temperature: 温度, 温度越高，抽样越随机
+    :param sample: 是否进行随机抽样
+    :param top_k: 抽样样本个数
     """
-    block_size = 64
+    block_size = model.config.block_size
+
+    # 设置为评估模式, 停用dropout
     model.is_training = False
+
+    # 生成符合目标长度的序列
     for k in range(steps):
-        # 如果需要，裁剪上下文
+        # 如果上文过长, 则截断到block_size
         x_cond = x if x.size(1) <= block_size else x[:, -block_size:]
 
-        # 提取最后一步的 logits 并按温度缩放, 温度越高，抽样越随机
+        # 用模型进行预测
         logits, _ = model(x_cond)
-        logits = logits[-1, : , :] / temperature
+        # 提取最后一步的回归结果并按温度缩放, 温度越高，抽样越随机'
+        logits = logits[:, -1 , :] / temperature
 
-        # 可选地将概率裁剪为前 k 个选项
+        # 可选地将样本裁剪为前 k 个概率最高的
         if top_k is not None:
             logits = top_k_logits(logits, top_k)
 
-        # 用 softmax 转换为概率
+        # 用 softmax 将回归值转换为概率
         probs = F.softmax(logits, dim=-1)
 
         # 如果启用sample选项, 则根据prob进行抽样, 否则选择最大的概率
@@ -59,27 +68,24 @@ def sample(model, x, steps, temperature=1.0, sample=False, top_k=None):
     return x
 
 if __name__ == "__main__":
-    embedding_dim = 128
-    hidden_dim = 128
-    batch_size = 2 * (256 + 128 + 64)
-    block_size = 64
-    num_epoch = 2
-    n_layer = 3
-    n_head = 4
-
-    # 加载词表
+    # 加载词表, 注意, 这里的词表必须是训练时使用的词表
     vocab = read_vocab('dataset/vocab.json')
-    # 加载模型
-    model = Transformer(len(vocab), embedding_dim, hidden_dim, block_size, num_head=n_head, num_layers=n_layer).to('cuda')
-    # 从checkpoint的pth文件中加载模型
+    # 设置参数, 注意, 这里的参数必须和训练时的参数一致
+    block_size = 64
+    batch_size = 768
+    num_epoch = 2
+    train_config = Config(vocab_size=len(vocab), block_size=block_size, batch_size=batch_size, n_embd=128, n_head=4,
+                          n_layer=3, hidden_dim=128, num_epoch=num_epoch)
+    # 创建模型对象
+    model = Transformer(train_config).to('cuda')
+    # 从checkpoint的pth文件中加载模型参数
     model = nn.DataParallel(model)
     model.load_state_dict(torch.load('checkpoint/model_checkpoint-0.pth'))
 
-    # 获取起点
-    begin = input("请输入开头单词：")
-    # 转换为token序列
-    context = "O God, O God!How can we live in such a world!"
+    # 将输入内容转换为token序列
+    context = "O God, O God!"
     x = torch.tensor([vocab.convert_tokens_to_ids(context)]).to('cuda')
-    # 生成序列
-    y = sample(model, x, 64, temperature=1.0, sample=True, top_k=10)[0]
+
+    # 生成结果并转换回字符
+    y = sample(model, x, 1000, temperature=1.0, sample=True, top_k=10)[0]
     print("".join(vocab.convert_ids_to_tokens(y)))
