@@ -4,15 +4,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-"""
-hi，最近有空帮我写个代码吧（用于教学），
-分别用LSTM以及Transformer实现基于字符的语言模型，
-包括模型训练和用训练号的模型生成文本（实现最基本的功能就好，不用支持多卡训练，代码增加必要的注释）。
-数据直接加载HuggingFace的datasets（https://huggingface.co/datasets/tiny_shakespeare）。
-Transformer的代码可以参考：https://github.com/karpathy/nanoGPT ，
-其中的模型文件用我发给你的（需要进行进一步修改）。
-"""
-
 
 @dataclass
 class Config:
