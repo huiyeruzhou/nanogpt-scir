@@ -15,11 +15,13 @@ def set_seed(seed):
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
 
+
 def top_k_logits(logits, k):
     v, ix = torch.topk(logits, k)
     out = logits.clone()
     out[out < v[:, [-1]]] = -float('Inf')
     return out
+
 
 @torch.no_grad()
 def sample(model, x, steps, temperature=1.0, sample=False, top_k=None):
@@ -48,7 +50,7 @@ def sample(model, x, steps, temperature=1.0, sample=False, top_k=None):
         # 用模型进行预测
         logits, _ = model(x_cond)
         # 提取最后一步的回归结果并按温度缩放, 温度越高，抽样越随机'
-        logits = logits[:, -1 , :] / temperature
+        logits = logits[:, -1, :] / temperature
 
         # 可选地将样本裁剪为前 k 个概率最高的
         if top_k is not None:
@@ -67,24 +69,26 @@ def sample(model, x, steps, temperature=1.0, sample=False, top_k=None):
         x = torch.cat((x, ix), dim=1)
     return x
 
+
 if __name__ == "__main__":
+    # 判断是否有可用的GPU
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     # 加载词表, 注意, 这里的词表必须是训练时使用的词表
     vocab = read_vocab('dataset/vocab.json')
     # 设置参数, 注意, 这里的参数必须和训练时的参数一致
-    block_size = 64
-    batch_size = 768
+    block_size = 96
+    batch_size = 384
     num_epoch = 2
-    train_config = Config(vocab_size=len(vocab), block_size=block_size, batch_size=batch_size, n_embd=128, n_head=4,
-                          n_layer=3, hidden_dim=128, num_epoch=num_epoch)
+    train_config = Config(vocab_size=len(vocab), block_size=block_size, batch_size=batch_size, n_embd=384, n_head=6,
+                          n_layer=4, hidden_dim=384, num_epoch=num_epoch)
     # 创建模型对象
-    model = Transformer(train_config).to('cuda')
+    model = Transformer(train_config).to(device)
     # 从checkpoint的pth文件中加载模型参数
-    model = nn.DataParallel(model)
     model.load_state_dict(torch.load('checkpoint/model_checkpoint-0.pth'))
 
     # 将输入内容转换为token序列
-    context = "O God, O God!"
-    x = torch.tensor([vocab.convert_tokens_to_ids(context)]).to('cuda')
+    context = "Hamlet:\nTo be or not to be, this is a question.\n"
+    x = torch.tensor([vocab.convert_tokens_to_ids(context)]).to(device)
 
     # 生成结果并转换回字符
     y = sample(model, x, 1000, temperature=1.0, sample=True, top_k=10)[0]

@@ -1,10 +1,4 @@
 # Defined in Section 4.6.1
-# # length of dataset in characters:  1115394
-# # all the unique characters:
-# #  !$&',-.3:;?ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz
-# # vocab size: 65
-# # train has 1003854 tokens
-# # val has 111540 tokens
 # https://github.com/HIT-SCIR/plm-nlp-code/blob/main/chp4/vocab.py
 from collections import defaultdict
 
@@ -16,7 +10,7 @@ class Vocab:
 
         if tokens is not None:
             if "<unk>" not in tokens:
-                 tokens = tokens + ["<unk>"]
+                tokens = tokens + ["<unk>"]
             for token in tokens:
                 self.idx_to_token.append(token)
                 self.token_to_idx[token] = len(self.idx_to_token) - 1
@@ -42,7 +36,7 @@ class Vocab:
         # 加入unk和保留词, 并根据词频过滤部分单词
         uniq_tokens = ["<unk>"] + (reserved_tokens if reserved_tokens else [])
         uniq_tokens += [token for token, freq in token_freqs.items() \
-                         if freq >= min_freq and token != "<unk>"]
+                        if freq >= min_freq and token != "<unk>"]
 
         return cls(uniq_tokens)
 
@@ -64,7 +58,10 @@ class Vocab:
     def convert_ids_to_tokens(self, indices):
         return [self.idx_to_token[index] for index in indices]
 
+
 import json
+
+
 def save_vocab(vocab, path):
     """
     保存词表为json格式
@@ -73,7 +70,6 @@ def save_vocab(vocab, path):
     """
     with open(path, 'w') as writer:
         writer.write(json.dumps(vocab.idx_to_token, indent=4))
-
 
 
 def read_vocab(path):

@@ -18,6 +18,7 @@ class CharDataset(Dataset):
     每次取样时返回一个block_size长度的序列
     目标是预测下一个字符
     """
+
     def __init__(self, data, block_size):
         """
         初始化一个数据集
@@ -42,30 +43,34 @@ class CharDataset(Dataset):
         y = torch.tensor(chunk[1:], dtype=torch.long)
         return x, y
 
+
 if __name__ == '__main__':
     # 加载数据
     train_data, test_data, vocab = load_tiny_shakespeare()
 
     # 设置参数
-    block_size = 64
-    batch_size = 768
+    # 如果显存不够, 可以减小hidden_dim/n_embd/batch_size
+    # 如果内存不够, 可以减少DataLoader的num_workers(见后文)
+    # 如果训练时间太长, 可以减少n_layer/num_epoch以及其他参数, 增大batch_size
+    # 如果参数已经很小, 但训练速度仍然太慢, 可以查看显存利用率, 如果显存利用率很低, 尝试增大batch_size
+    block_size = 96
+    batch_size = 384
     num_epoch = 2
-    train_config = Config(vocab_size=len(vocab), block_size=block_size, batch_size=batch_size, n_embd=128, n_head=4,
-                          n_layer=3, hidden_dim=128, num_epoch=num_epoch)
+    train_config = Config(vocab_size=len(vocab), block_size=block_size, batch_size=batch_size, n_embd=384, n_head=6,
+                          n_layer=4, hidden_dim=384, num_epoch=num_epoch)
 
     # 创建数据集, 注意, 由于Transformer限制输入序列长度, 数据集每次输出的序列长度由block_size决定(与之相等)
     train_dataset = CharDataset(train_data, block_size)
     test_dataset = CharDataset(test_data, block_size)
-    # 创建DataLoader, 指定放置于GPU上(如有), 用4个进程加载数据
+    # 创建DataLoader, pin_memory指定数据放置于不可被换出的页上以加快 RAM 和 GPU 交换数据的速度(如有), 用16个进程加载数据
     # 训练集样本每次随机打乱, 测试集样本不打乱
-    train_data_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, pin_memory=True, num_workers=4)
-    test_data_loader = DataLoader(test_dataset, batch_size=1, shuffle=False, pin_memory=True, num_workers=4)
+    train_data_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, pin_memory=True, num_workers=16)
+    test_data_loader = DataLoader(test_dataset, batch_size=1, shuffle=False, pin_memory=True, num_workers=16)
 
-
-    # 加载模型
+    # 判断使用的设备
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    # 加载模型
     model = Transformer(train_config)
-    model = nn.DataParallel(model)
     model.to(device)
 
     # 将模型设置为训练模式, 这会启用Dropout等正则化操作
@@ -110,7 +115,7 @@ if __name__ == '__main__':
     # 测试过程
     acc = 0
     losses = []
-    pbar  = tqdm(enumerate(test_data_loader), total=len(test_data_loader))
+    pbar = tqdm(enumerate(test_data_loader), total=len(test_data_loader))
     for batch in pbar:
         it, (inputs, targets) = batch
         inputs = inputs.to('cuda')
