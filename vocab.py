@@ -6,7 +6,8 @@
 # # train has 1003854 tokens
 # # val has 111540 tokens
 # https://github.com/HIT-SCIR/plm-nlp-code/blob/main/chp4/vocab.py
-from collections import defaultdict, Counter
+from collections import defaultdict
+
 
 class Vocab:
     def __init__(self, tokens=None):
