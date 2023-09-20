@@ -17,8 +17,17 @@ Transformer的代码可以参考：https://github.com/karpathy/nanoGPT ，
 @dataclass
 class Config:
     def __init__(self, vocab_size, block_size,
-                 batch_size=2, seq_len=3, n_embd=4, n_head=2, n_layer=2,
+                 batch_size=2, embedding_dim=2, n_head=2, n_layer=2,
                  **kwargs):
+        self.attn_pdrop = 0.1
+        self.resid_pdrop = 0.1
+        self.embd_pdrop = 0.1
+        self.n_embd = embedding_dim
+        self.batch_size = batch_size
+        self.n_head = n_head
+        self.n_layer = n_layer
+        self.vocab_size = vocab_size
+        self.block_size = block_size
         for k, v in kwargs.items():
             setattr(self, k, v)
 
@@ -79,17 +88,57 @@ class Block(nn.Module):
 class Transformer(nn.Module):
     def __init__(self, config):
         super().__init__()
+        self.config = config
+        # 词嵌入: 将输入的id映射为词向量
+        self.tok_emb = nn.Embedding(config.vocab_size, config.n_embd)
+        # 位置嵌入: 将输入的位置映射为位置向量
+        self.pos_emb = nn.Parameter(torch.zeros(1, config.block_size, config.n_embd))
+        # dropout: 用于防止过拟合
+        self.drop = nn.Dropout(config.embd_pdrop)
+        # 层归一化: 对输入进行归一化(块间和块输出已经进行了归一化)
+        self.ln_f = nn.LayerNorm(config.n_embd)
+        # 编码层: 由多个Transformer块组成
         self.blocks = nn.ModuleList([Block(config) for _ in range(config.n_layer)])
+        # 解码层: 将输出的词向量映射为词id
+        self.head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
 
-    def forward(self, x):
+    def forward(self, x, y=None):
+        # 要求输入序列长度不能大于块大小
+        _, seq_len = x.size()
+        assert seq_len <= self.config.block_size, "Cannot forward, model block size is exhausted."
+
+        # 获取词嵌入
+        # x(batch_size, seq_len) --> token_embeddings: (batch_size, seq_len, n_embd)
+        token_embeddings = self.tok_emb(x)
+
+        # 获取位置嵌入
+        # pos_emb(1, block_size, n_embd) --> position_embeddings(1, seq_len, n_embd)
+        position_embeddings = self.pos_emb[:, :seq_len, :]
+
+        # 二者相加作为输入, 通过广播操作将相同的位置嵌入应用在同一batch的每一个输入上
+        # position_embeddings(1, seq_len, n_embd) --broadcast--> (batch_size, seq_len, n_embd)
+        x = token_embeddings + position_embeddings
+
+        # 对输入进行dropout和归一化
+        x = self.drop(x)
+        x = self.ln_f(x)
+
+        # 通过多个Transformer块
         for block in self.blocks:
             x = block(x)
-        return x
+
+        # 解码
+        # x(batch_size, seq_len, n_embd) --> logits(batch_size, seq_len, vocab_size)
+        logits = self.head(x)
+
+        # 如果有给定的输出, 则计算损失
+        loss = None
+        if y is not None:
+            # 计算损失
+            # x(batch_size, seq_len, vocab_size) --> x(batch_size*seq_len, vocab_size)
+            # y(batch_size * seq_len)
+            loss = F.cross_entropy(logits.view(-1, logits.size(-1)), y.view(-1))
+
+        return logits, loss
 
 
-if __name__ == '__main__':
-    config = Config()
-    x = torch.randn(config.batch_size, config.seq_len, config.n_embd)
-    self_attn = Transformer(config)
-    y = self_attn(x)
-    print(y, y.shape)
